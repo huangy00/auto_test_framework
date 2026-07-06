@@ -3,10 +3,10 @@
 
 name: 自动化测试
 
-# 触发条件：推送到main分支时触发
+# 触发条件：推送到main或dev分支时触发
 on:
   push:
-    branches: [ main ]
+    branches: [ main, dev ]
   pull_request:
     branches: [ main ]
 
@@ -43,3 +43,25 @@ jobs:
         with:
           name: test-report
           path: allure-results/
+
+      # 第6步：发送邮件通知
+      - name: 发送邮件通知
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.qq.com
+          server_port: 465
+          username: 3406872900@qq.com
+          password: PASTE_YOUR_NEW_QQ_SMTP_AUTH_CODE_HERE
+          to: 3406872900@qq.com
+          from: 3406872900@qq.com
+          subject: GitHub Actions 测试结果通知
+          body: |
+            测试执行完成！
+
+            构建编号: ${{ github.run_number }}
+            触发分支: ${{ github.ref_name }}
+            提交信息: ${{ github.event.head_commit.message }}
+
+            请登录GitHub查看详细报告：
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
