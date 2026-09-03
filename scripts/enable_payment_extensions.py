@@ -51,6 +51,20 @@ def main() -> int:
             ),
         )
         logger.info(f"支付方式已启用: {code}")
+
+    # 自检：确认两种支付方式均已就绪，缺失则报错退出，便于 CI 定位
+    missing = []
+    for code in PAYMENTS:
+        row = db_helper.query_one(
+            "SELECT status FROM oc_extension_install WHERE code = %s", (code,)
+        )
+        if not row or row["status"] != 1:
+            missing.append(code)
+    if missing:
+        logger.error(f"自检失败，以下支付方式未启用: {missing}")
+        return 1
+
+    logger.info("支付方式自检通过: cod / free_checkout 均已启用")
     return 0
 
 
