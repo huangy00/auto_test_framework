@@ -1,10 +1,11 @@
 # GitHub Actions 自动化测试
 # 触发条件：推送到 main/dev 分支、对 main 的 PR、以及每天 02:00 定时回归
 #
-# 注意：测试需要一个真实的 OpenCart 站点 + MySQL，因此本 workflow 会：
+# 说明：测试需要一个真实的 OpenCart 站点 + MySQL，因此本 workflow 会：
 #   1. 启动 MySQL 8.0 服务容器
 #   2. 下载官方 OpenCart 4.1.0.3（含演示数据），用 cli_install.php 命令行安装
-#   3. 用 PHP 内置服务器托管站点，然后运行 pytest
+#   3. 在同一 step 内启动 PHP 内置服务器并运行 pytest
+#      （服务进程随 step 结束会被 runner 清理，因此不能拆成独立 step）
 #
 # 邮件通知（可选）：在仓库 Settings -> Secrets and variables -> Actions 中配置：
 #   SMTP_USERNAME / SMTP_PASSWORD（QQ 邮箱 SMTP 授权码，勿直接写进文件）/ NOTIFY_TO
@@ -22,6 +23,13 @@ on:
 
 env:
   SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+  # 测试配置经环境变量注入（utils/config_reader.py 支持 SECTION_KEY 覆盖 config.ini）
+  DB_HOST: 127.0.0.1
+  DB_PORT: '3306'
+  DB_USER: root
+  DB_PASSWORD: root
+  DB_DATABASE: xiangmu
+  UI_BASE_URL: http://localhost:8080/
 
 jobs:
   test:
@@ -87,10 +95,19 @@ jobs:
           # 安装完成后删除 install 目录，避免被外部访问
           rm -rf "$OC_WEB/install"
 
-      # 第5步：启动站点（PHP 内置服务器）并等待就绪
-      - name: 启动站点
+      # 第5步：安装 Python 依赖与 Playwright 浏览器
+      - name: 安装依赖
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt
+          python3 -m playwright install chromium --with-deps
+
+      # 第6步：启动站点并运行测试
+      # PHP 内置服务器为后台进程，跨 step 会被 runner 清理，故与测试放在同一 step。
+      - name: 启动站点并运行测试
         run: |
           php -S 127.0.0.1:8080 -t "$OC_WEB" > php_server.log 2>&1 &
+          # 等待站点就绪（最多 30 秒）
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:8080/ > /dev/null; then
               echo "站点已就绪"
@@ -98,39 +115,15 @@ jobs:
             fi
             sleep 1
           done
-          curl -s http://127.0.0.1:8080/ | grep -qi "your store" && echo "首页校验通过"
+          curl -sf http://127.0.0.1:8080/ > /dev/null || { echo "站点未能启动:"; cat php_server.log; exit 1; }
 
-      # 第7步：安装 Python 依赖与 Playwright 浏览器
-      - name: 安装依赖
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r requirements.txt
-          python3 -m playwright install chromium --with-deps
+          # 播种固定测试账号（全新安装的 OpenCart 没有该用户）
+          python3 scripts/seed_test_user.py
 
-      # 第8步：播种固定测试账号（全新安装的 OpenCart 没有该用户）
-      - name: 播种测试账号
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: '3306'
-          DB_USER: root
-          DB_PASSWORD: root
-          DB_DATABASE: xiangmu
-          UI_BASE_URL: http://localhost:8080/
-        run: python3 scripts/seed_test_user.py
-
-      # 第9步：运行测试（显式顺序：UI 下单在前，DB 一致性验证在后，见 scripts/seed_test_user.py）
-      - name: 运行测试
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: '3306'
-          DB_USER: root
-          DB_PASSWORD: root
-          DB_DATABASE: xiangmu
-          UI_BASE_URL: http://localhost:8080/
-        run: |
+          # 运行测试（显式顺序：UI 下单在前，DB 一致性验证在后）
           python3 -m pytest tests/test_ui/ tests/test_api/ tests/test_db/ --alluredir=allure-results -v
 
-      # 第10步：上传测试报告
+      # 第7步：上传测试报告
       - name: 上传测试报告
         if: always()
         uses: actions/upload-artifact@v4
@@ -138,7 +131,7 @@ jobs:
           name: test-report
           path: allure-results/
 
-      # 第11步：发送邮件通知（仅当配置了 SMTP Secrets 时执行）
+      # 第8步：发送邮件通知（仅当配置了 SMTP Secrets 时执行）
       - name: 发送邮件通知
         if: always() && env.SMTP_PASSWORD != ''
         uses: dawidd6/action-send-mail@v3
