@@ -14,5 +14,6 @@ allure-report/
 logs/
 *.log
 .env
+config/config.ini
 .DS_Store
 Thumbs.db

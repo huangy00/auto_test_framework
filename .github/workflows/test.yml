@@ -1,9 +1,17 @@
-# GitHub Actions 自动化测试配置
-# 作用：每次推送代码到GitHub，自动运行测试
+# GitHub Actions 自动化测试
+# 触发条件：推送到 main/dev 分支、对 main 的 PR、以及每天 02:00 定时回归
+#
+# 注意：测试需要一个真实的 OpenCart 站点 + MySQL，因此本 workflow 会：
+#   1. 启动 MySQL 8.0 服务容器
+#   2. 下载官方 OpenCart 4.1.0.3（含演示数据），用 cli_install.php 命令行安装
+#   3. 用 PHP 内置服务器托管站点，然后运行 pytest
+#
+# 邮件通知（可选）：在仓库 Settings -> Secrets and variables -> Actions 中配置：
+#   SMTP_USERNAME / SMTP_PASSWORD（QQ 邮箱 SMTP 授权码，勿直接写进文件）/ NOTIFY_TO
+#   未配置时邮件步骤自动跳过，不影响 CI 结果。
 
 name: 自动化测试
 
-# 触发条件：推送到main或dev分支时触发
 on:
   push:
     branches: [ main, dev ]
@@ -11,33 +19,118 @@ on:
     branches: [ main ]
   schedule:
     - cron: '0 2 * * *'
+
+env:
+  SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: xiangmu
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
 
     steps:
       # 第1步：拉取代码
       - name: 拉取代码
         uses: actions/checkout@v4
 
-      # 第2步：安装Python
-      - name: 安装Python
-        uses: actions/setup-python@v5
+      # 第2步：安装 PHP 及 OpenCart 所需扩展
+      - name: 安装 PHP
+        uses: shivammathur/setup-php@v2
         with:
-          python-version: '3.11'
+          php-version: '8.3'
+          extensions: mysqli, gd, curl, zip, mbstring, intl
+          coverage: none
 
-      # 第3步：安装依赖
+      # 第3步：下载官方 OpenCart 4.1.0.3 并部署
+      - name: 部署 OpenCart
+        run: |
+          curl -sSL -o opencart.zip https://github.com/opencart/opencart/releases/download/4.1.0.3/opencart-4.1.0.3.zip
+          unzip -q opencart.zip -d oc_src
+          # 兼容包内结构（顶层即站点，或含 upload/ 目录）
+          if [ -d oc_src/upload ]; then
+            mv oc_src/upload "$HOME/opencart"
+          else
+            mv oc_src "$HOME/opencart"
+          fi
+          chmod -R 777 "$HOME/opencart/system/storage"
+          echo "OC_WEB=$HOME/opencart" >> "$GITHUB_ENV"
+
+      # 第4步：命令行安装 OpenCart（en-gb 含演示商品，满足搜索/下单用例）
+      - name: 安装 OpenCart
+        run: |
+          php "$OC_WEB/install/cli_install.php" install \
+            --username admin \
+            --email admin@example.com \
+            --password 'Admin@12345' \
+            --http_server 'http://localhost:8080/' \
+            --language en-gb \
+            --db_driver mysqli \
+            --db_hostname 127.0.0.1 \
+            --db_username root \
+            --db_password root \
+            --db_database xiangmu \
+            --db_port 3306 \
+            --db_prefix oc_
+          # 安装完成后删除 install 目录，避免被外部访问
+          rm -rf "$OC_WEB/install"
+
+      # 第5步：启动站点（PHP 内置服务器）并等待就绪
+      - name: 启动站点
+        run: |
+          php -S 127.0.0.1:8080 -t "$OC_WEB" > php_server.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8080/ > /dev/null; then
+              echo "站点已就绪"
+              break
+            fi
+            sleep 1
+          done
+          curl -s http://127.0.0.1:8080/ | grep -qi "your store" && echo "首页校验通过"
+
+      # 第7步：安装 Python 依赖与 Playwright 浏览器
       - name: 安装依赖
         run: |
-          pip install -r requirements.txt
-          playwright install chromium
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt
+          python3 -m playwright install chromium --with-deps
 
-      # 第4步：运行测试
+      # 第8步：播种固定测试账号（全新安装的 OpenCart 没有该用户）
+      - name: 播种测试账号
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: root
+          DB_DATABASE: xiangmu
+          UI_BASE_URL: http://localhost:8080/
+        run: python3 scripts/seed_test_user.py
+
+      # 第9步：运行测试（显式顺序：UI 下单在前，DB 一致性验证在后，见 scripts/seed_test_user.py）
       - name: 运行测试
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: root
+          DB_DATABASE: xiangmu
+          UI_BASE_URL: http://localhost:8080/
         run: |
-          pytest tests/ --alluredir=allure-results -v
+          python3 -m pytest tests/test_ui/ tests/test_api/ tests/test_db/ --alluredir=allure-results -v
 
-      # 第5步：上传测试报告
+      # 第10步：上传测试报告
       - name: 上传测试报告
         if: always()
         uses: actions/upload-artifact@v4
@@ -45,17 +138,17 @@ jobs:
           name: test-report
           path: allure-results/
 
-      # 第6步：发送邮件通知
+      # 第11步：发送邮件通知（仅当配置了 SMTP Secrets 时执行）
       - name: 发送邮件通知
-        if: always()
+        if: always() && env.SMTP_PASSWORD != ''
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.qq.com
           server_port: 465
-          username: 3406872900@qq.com
-          password: PASTE_YOUR_NEW_QQ_SMTP_AUTH_CODE_HERE
-          to: 3406872900@qq.com
-          from: 3406872900@qq.com
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          to: ${{ secrets.NOTIFY_TO }}
+          from: ${{ secrets.SMTP_USERNAME }}
           subject: GitHub Actions 测试结果通知
           body: |
             测试执行完成！

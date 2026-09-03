@@ -23,6 +23,12 @@ class TestLoginAPI:
         )
         logger.info(f"Login response: {response.status_code}")
         assert response.status_code in [200, 302]
+        # 业务校验：登录成功后会话应有效，账户页可访问并展示 My Account
+        account = api_session.get(
+            f"{site_url}/index.php?route=account/account",
+        )
+        assert account.status_code == 200
+        assert "my account" in account.text.lower(), "登录成功后应能访问账户页 (My Account)"
 
     @allure.story("Wrong password")
     @allure.severity(allure.severity_level.CRITICAL)

@@ -1,0 +1,20 @@
+[DEFAULT]
+timeout = 10
+
+[ui]
+; 被测站点地址。CI 中可用环境变量 UI_BASE_URL 覆盖
+base_url = http://localhost/opencart/
+
+[log]
+level = INFO
+file = logs/test.log
+
+[db]
+host = localhost
+port = 3306
+user = root
+; 数据库密码不要直接提交到仓库。
+; 方式一：复制本文件为 config.ini 并填入本地密码（config.ini 已被 .gitignore 忽略）
+; 方式二：运行时通过环境变量 DB_PASSWORD 注入（CI 推荐），亦可用 DB_HOST/DB_USER/DB_DATABASE 覆盖其余项
+password =
+database = xiangmu

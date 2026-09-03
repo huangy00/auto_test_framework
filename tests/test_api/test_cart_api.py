@@ -23,6 +23,12 @@ class TestCartAPI:
         )
         logger.info(f"Add to cart response: {response.status_code}")
         assert response.status_code == 200
+        # 业务校验：加购接口成功后，购物车页应能查到该商品（43 为演示数据 MacBook）
+        cart_page = logged_in_session.get(
+            f"{site_url}/index.php?route=checkout/cart",
+        )
+        assert cart_page.status_code == 200
+        assert "macbook" in cart_page.text.lower(), "加购成功后购物车应包含 MacBook"
 
     @allure.story("Zero quantity")
     @allure.severity(allure.severity_level.CRITICAL)

@@ -18,7 +18,8 @@ class TestSearchAPI:
             params={"search": "MacBook"},
         )
         assert response.status_code == 200
-        assert "macbook" in response.text.lower() or "product" in response.text.lower()
+        # 业务校验：搜索 "MacBook" 必须真实命中 MacBook 商品，而非仅返回任意页面
+        assert "macbook" in response.text.lower()
 
     @allure.story("No results")
     @allure.severity(allure.severity_level.CRITICAL)

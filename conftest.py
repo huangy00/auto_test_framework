@@ -37,10 +37,8 @@ def page():
     自动截图失败场景并附加到 Allure
     """
     with sync_playwright() as p:
-        # 启动浏览器
-        # headless=False = 显示浏览器界面（调试用）
-        # slow_mo=500 = 每个操作间隔0.5秒，方便看清过程
-        browser = p.chromium.launch(headless=False, slow_mo=500)
+        # 启动浏览器（后台运行，不显示界面）
+        browser = p.chromium.launch(headless=True)
         context = browser.new_context(
             viewport={"width": 1920, "height": 1080},
             ignore_https_errors=True,

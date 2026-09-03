@@ -9,6 +9,35 @@ import subprocess
 import pymysql
 from pymysql.cursors import DictCursor
 
+# 确保可以从仓库根目录导入 utils 包（无论从哪个目录执行 setup.py）
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from utils.config_reader import config
+
+
+def get_db_config(include_db=False):
+    """
+    读取数据库连接参数。
+    优先级：环境变量（DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_DATABASE）> config/config.ini
+    数据库密码不应硬编码在代码中，也不应随仓库提交。
+    """
+    params = {
+        "host": config.get("db", "host"),
+        "port": config.getint("db", "port"),
+        "user": config.get("db", "user"),
+        "password": config.get("db", "password"),
+        "charset": "utf8mb4",
+    }
+    if include_db:
+        params["database"] = config.get("db", "database")
+    if not params["password"]:
+        print("\n[ERROR] 未配置数据库密码。")
+        print("  请二选一：")
+        print("  1. 设置环境变量 DB_PASSWORD（如: set DB_PASSWORD=你的密码）")
+        print("  2. 复制 config/config.ini.example 为 config/config.ini 并填写密码")
+        print("     （config.ini 已被 .gitignore 忽略，不会提交到仓库）")
+        sys.exit(1)
+    return params
+
 
 def print_step(msg):
     print(f"\n{'='*50}")
@@ -20,26 +49,20 @@ def check_mysql():
     """检查 MySQL 是否可连接"""
     print_step("步骤1：检查 MySQL 连接")
     try:
-        conn = pymysql.connect(
-            host="localhost", port=3306, user="root", password="root123456",
-            charset="utf8mb4"
-        )
+        conn = pymysql.connect(**get_db_config())
         conn.close()
         print("  [OK] MySQL 连接成功")
         return True
     except Exception as e:
         print(f"  [FAIL] MySQL 连接失败: {e}")
-        print("  请确保 XAMPP 的 MySQL 已启动，密码为 root123456")
+        print("  请确认 MySQL 服务已启动，且数据库密码已通过环境变量 DB_PASSWORD 或 config/config.ini 提供")
         return False
 
 
 def create_database():
     """创建数据库"""
     print_step("步骤2：创建数据库 xiangmu")
-    conn = pymysql.connect(
-        host="localhost", port=3306, user="root", password="root123456",
-        charset="utf8mb4"
-    )
+    conn = pymysql.connect(**get_db_config())
     cursor = conn.cursor()
     cursor.execute("CREATE DATABASE IF NOT EXISTS xiangmu CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci")
     cursor.execute("USE xiangmu")
@@ -83,10 +106,9 @@ def install_payment_extensions():
     """安装 OpenCart 支付扩展"""
     print_step("步骤5：安装支付扩展")
     try:
-        conn = pymysql.connect(
-            host="localhost", port=3306, user="root", password="root123456",
-            database="xiangmu", charset="utf8mb4", cursorclass=DictCursor
-        )
+        db_cfg = get_db_config(include_db=True)
+        db_cfg["cursorclass"] = DictCursor
+        conn = pymysql.connect(**db_cfg)
         cursor = conn.cursor()
 
         # 检查是否已安装
