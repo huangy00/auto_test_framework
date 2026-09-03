@@ -44,6 +44,7 @@ def main() -> int:
         return 0
 
     base = config.get("ui", "base_url").rstrip("/")
+    logger.info(f"站点地址: {base}")
     session = requests.Session()
     session.headers.update(
         {
@@ -53,11 +54,19 @@ def main() -> int:
     )
 
     # 1) GET 注册页，获取 CSRF register_token
-    page = session.get(f"{base}/index.php?route=account/register")
-    page.raise_for_status()
+    try:
+        page = session.get(f"{base}/index.php?route=account/register", timeout=20)
+        page.raise_for_status()
+    except Exception as e:
+        logger.error(f"访问注册页失败: {e}")
+        return 1
+    logger.info(f"注册页 HTTP {page.status_code}，正文长度 {len(page.text)}")
     m = re.search(r"register_token=([a-zA-Z0-9]+)", page.text)
     if not m:
-        logger.error("注册页未找到 register_token，播种失败")
+        # 输出页面片段辅助定位（页面结构或语言变化时）
+        logger.error(
+            f"注册页未找到 register_token，页面片段: {page.text[:500]}"
+        )
         return 1
     token = m.group(1)
 
@@ -70,11 +79,15 @@ def main() -> int:
         "password": PASSWORD,
         "agree": "1",
     }
+    register_url = f"{base}/index.php?route=account/register.register&register_token={token}"
+    logger.info(f"POST 注册接口: {register_url}")
     response = session.post(
-        f"{base}/index.php?route=account/register.register&register_token={token}",
+        register_url,
         data=data,
         allow_redirects=False,
+        timeout=20,
     )
+    logger.info(f"注册响应: status={response.status_code} ctype={response.headers.get('Content-Type')} body={response.text[:300]}")
     redirect = ""
     if response.headers.get("Content-Type", "").startswith("application/json"):
         redirect = json.loads(response.text).get("redirect", "")
@@ -93,4 +106,11 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        logger.error(f"播种脚本未捕获异常: {e}")
+        sys.exit(1)
