@@ -125,6 +125,10 @@ jobs:
           done
           curl -sf http://127.0.0.1:8080/ > /dev/null || { echo "站点未能启动:"; cat php_server.log; exit 1; }
 
+          # 启用内置支付方式（全新安装的演示数据 oc_extension_install 为空表，
+          # 无支付方式则结算页无法下单）
+          python3 scripts/enable_payment_extensions.py
+
           # 播种固定测试账号（全新安装的 OpenCart 没有该用户）
           python3 scripts/seed_test_user.py
 
