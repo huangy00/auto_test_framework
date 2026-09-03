@@ -101,6 +101,10 @@ class TestCheckoutFlow:
             checkout_page = CheckoutPage(page)
             checkout_page.checkout()
             checkout_page.fill_billing_details(test_data["checkout"])
+            # 新注册用户没有默认地址，需先填配送地址并依次选择配送/支付方式
+            checkout_page.add_shipping_address(test_data["checkout"])
+            checkout_page.choose_shipping_method()
+            checkout_page.choose_payment_method()
             checkout_page.confirm_order()
             checkout_page.screenshot("checkout_result")
             order_success = checkout_page.is_order_success()
