@@ -7,9 +7,10 @@
 #   3. 在同一 step 内启动 PHP 内置服务器并运行 pytest
 #      （服务进程随 step 结束会被 runner 清理，因此不能拆成独立 step）
 #
-# 邮件通知（可选）：在仓库 Settings -> Secrets and variables -> Actions 中配置：
-#   SMTP_USERNAME / SMTP_PASSWORD（QQ 邮箱 SMTP 授权码，勿直接写进文件）/ NOTIFY_TO
-#   未配置时邮件步骤自动跳过，不影响 CI 结果。
+# Secret 配置（仓库 Settings -> Secrets and variables -> Actions）：
+#   SMTP_PASSWORD / SMTP_USERNAME / NOTIFY_TO —— QQ 邮箱通知（SMTP_PASSWORD 为授权码，勿写明文）
+#   DB_PASSWORD —— CI 临时 MySQL 的 root 密码（任意强密码即可，与本地 config.ini 无关）
+#   全部经 ${{ secrets.* }} 注入，仓库内不落任何明文密码；SMTP 未配置时邮件步骤自动跳过。
 
 name: 自动化测试
 
@@ -29,7 +30,7 @@ env:
   DB_HOST: 127.0.0.1
   DB_PORT: '3306'
   DB_USER: root
-  DB_PASSWORD: root
+  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
   DB_DATABASE: xiangmu
   UI_BASE_URL: http://localhost:8080/
 
@@ -41,12 +42,12 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: root
+          MYSQL_ROOT_PASSWORD: ${{ secrets.DB_PASSWORD }}
           MYSQL_DATABASE: xiangmu
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
@@ -95,7 +96,7 @@ jobs:
             --db_driver mysqli \
             --db_hostname 127.0.0.1 \
             --db_username root \
-            --db_password root \
+            --db_password "$DB_PASSWORD" \
             --db_database xiangmu \
             --db_port 3306 \
             --db_prefix oc_
