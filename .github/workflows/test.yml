@@ -23,6 +23,8 @@ on:
 
 env:
   SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+  SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+  NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
   # 测试配置经环境变量注入（utils/config_reader.py 支持 SECTION_KEY 覆盖 config.ini）
   DB_HOST: 127.0.0.1
   DB_PORT: '3306'
@@ -136,9 +138,9 @@ jobs:
           name: test-report
           path: allure-results/
 
-      # 第8步：发送邮件通知（仅当配置了 SMTP Secrets 时执行）
+      # 第8步：发送邮件通知（SMTP_USERNAME/SMTP_PASSWORD/NOTIFY_TO 三个 Secrets 配齐才执行）
       - name: 发送邮件通知
-        if: always() && env.SMTP_PASSWORD != ''
+        if: always() && env.SMTP_PASSWORD != '' && env.SMTP_USERNAME != '' && env.NOTIFY_TO != ''
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.qq.com
