@@ -79,6 +79,11 @@ jobs:
       # 第4步：命令行安装 OpenCart（en-gb 含演示商品，满足搜索/下单用例）
       - name: 安装 OpenCart
         run: |
+          # cli_install 前置校验要求 config.php / admin/config.php 已存在（由模板复制）。
+          # 注意：cli_install 对前置校验失败只是打印错误并正常退出（exit 0），
+          # 不会建任何表——不先复制模板会"假成功"导致后续查不到 oc_customer 表。
+          cp "$OC_WEB/config-dist.php" "$OC_WEB/config.php"
+          cp "$OC_WEB/admin/config-dist.php" "$OC_WEB/admin/config.php"
           php "$OC_WEB/install/cli_install.php" install \
             --username admin \
             --email admin@example.com \
