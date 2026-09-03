@@ -16,14 +16,26 @@ class BasePage:
         self.page = page
         self.timeout = config.getint("DEFAULT", "timeout") * 1000
 
-    def navigate(self, url: str):
-        """打开指定 URL；首次加载失败时以 commit 状态重试一次"""
+    def navigate(self, url: str, retries: int = 3):
+        """打开指定 URL。
+
+        页面在前一次导航（如登录提交后的 JS 跳转）尚未完成时调用 goto，
+        Playwright 会抛 "interrupted by another navigation"。此时先等待当前
+        导航稳定，再重试，最多 retries 次。
+        """
         logger.info(f"Navigating to {url}")
-        try:
-            self.page.goto(url, wait_until="domcontentloaded", timeout=15000)
-        except Exception:
-            logger.warning(f"Navigation failed, retrying")
-            self.page.goto(url, wait_until="commit", timeout=15000)
+        for attempt in range(1, retries + 1):
+            try:
+                self.page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                return
+            except Exception as e:
+                if attempt == retries:
+                    raise
+                logger.warning(f"Navigation failed (attempt {attempt}/{retries}): {e}")
+                try:
+                    self.page.wait_for_load_state("domcontentloaded", timeout=10000)
+                except Exception:
+                    pass
 
     def click(self, selector: str, timeout: int = None):
         """点击指定元素，失败时自动截图留证"""

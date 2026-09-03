@@ -28,11 +28,20 @@ class LoginPage(BasePage):
         return self
 
     def login(self, email: str, password: str):
-        """填写邮箱密码并提交登录表单"""
+        """填写邮箱密码并提交登录表单。
+
+        OpenCart 4 登录为 AJAX 提交 + JS 跳转，点击后等待页面稳定，
+        避免后续立即 navigate 与登录跳转产生导航竞争。
+        """
         logger.info(f"Logging in with: {email}")
         self.fill(self.INPUT_EMAIL, email)
         self.fill(self.INPUT_PASSWORD, password)
         self.click(self.BTN_LOGIN)
+        self.page.wait_for_timeout(500)
+        try:
+            self.page.wait_for_load_state("domcontentloaded", timeout=15000)
+        except Exception:
+            logger.warning("登录提交后页面未完成跳转（可能为登录失败场景）")
         return self
 
     def is_login_success(self) -> bool:

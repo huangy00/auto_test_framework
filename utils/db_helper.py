@@ -23,6 +23,10 @@ class DBHelper:
             "database": config.get("db", "database"),
             "charset": "utf8mb4",
             "cursorclass": DictCursor,
+            # 自动提交：db_helper 是全局共享单连接，若开启隐式事务，长时间
+            # 运行后连接会停留在旧的一致性快照，看不到应用（PHP）后续提交的
+            # 新数据（曾导致全套件中"注册成功但 DB 查不到用户"的偶发失败）。
+            "autocommit": True,
         }
         self.connection = None
         logger.info(f"DBHelper initialized, database={self.db_config['database']}")

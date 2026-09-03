@@ -29,6 +29,10 @@ class TestCheckoutAPI:
 
     @allure.story("Checkout without login")
     @allure.severity(allure.severity_level.CRITICAL)
+    @pytest.mark.xfail(
+        reason="BUG-002: OpenCart 4.1.0.3 未登录访问结算页重定向到购物车页而非登录页，属产品缺陷（见 docs/defect_report）；修复后本用例将 XPASS 提醒",
+        strict=True,
+    )
     def test_checkout_without_login(self, api_session, site_url):
         response = api_session.get(
             f"{site_url}/index.php?route=checkout/checkout",

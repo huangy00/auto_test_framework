@@ -49,6 +49,12 @@ class RegisterPage(BasePage):
             privacy_checkbox.check()
 
         self.click(self.BTN_CONTINUE)
+        # 注册提交为 AJAX + JS 跳转，等待页面稳定，避免后续立即导航竞争
+        self.page.wait_for_timeout(500)
+        try:
+            self.page.wait_for_load_state("domcontentloaded", timeout=15000)
+        except Exception:
+            logger.warning("注册提交后页面未完成跳转（可能为注册失败场景）")
         return self
 
     def is_register_success(self) -> bool:
