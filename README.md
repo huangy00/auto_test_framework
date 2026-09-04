@@ -1,152 +1,101 @@
 # auto_test_framework - OpenCart 电商自动化测试框架
 
-## 项目简介
+针对 OpenCart 4.1.0.3 电商系统的全链路自动化测试框架：UI 自动化（Playwright）+ API 测试（Requests）+ 数据库数据一致性验证（PyMySQL），带 GitHub Actions 持续集成（云端自动部署被测环境）与 Allure 报告。
 
-本项目是一个针对本地部署的 OpenCart 电商系统的全链路自动化测试框架，覆盖 UI 自动化和数据库数据一致性验证两大维度。
+## 技术栈
 
-### 技术栈
-
-- **Python 3.11** - 主语言
-- **Pytest** - 测试框架
-- **Playwright** - UI 自动化
-- **Requests** - HTTP 客户端
-- **Allure** - 测试报告
-- **PyMySQL** - 数据库操作
-
-### 被测系统
-
-- **OpenCart 4.1.0.3** - 本地部署 (http://localhost/opencart)
-- **MySQL** - 数据库名 `xiangmu`，表前缀 `oc_`
+- **Python 3.10+** · **Pytest** · **Playwright**(UI) · **Requests**(API) · **Allure**(报告) · **PyMySQL**(DB)
+- **被测系统**:OpenCart 4.1.0.3 + MySQL 8.0(库 `xiangmu`,表前缀 `oc_`)
 
 ## 目录结构
 
 ```
 auto_test_framework/
-├── config/
-│   └── config.ini           # 配置文件
-├── data/
-│   ├── users.json           # 用户测试数据
-│   └── products.json        # 商品测试数据
-├── utils/
-│   ├── __init__.py
-│   ├── config_reader.py     # 配置读取
-│   ├── logger.py            # 日志封装
-│   ├── api_client.py        # API 客户端
-│   └── db_helper.py         # 数据库助手
-├── pages/
-│   ├── __init__.py
-│   ├── base_page.py         # 页面基类
-│   ├── login_page.py        # 登录页面
-│   ├── register_page.py     # 注册页面
-│   ├── product_page.py      # 商品页面
-│   └── checkout_page.py     # 结算页面
+├── config/config.ini.example   # 配置模板（真实 config.ini 不入库，见下方"配置"）
+├── data/                       # users.json / products.json 测试数据
+├── utils/                      # config_reader / logger / api_client / db_helper
+├── pages/                      # POM 页面对象（base/login/register/product/checkout）
 ├── tests/
-│   ├── __init__.py
-│   ├── test_ui/
-│   │   ├── __init__.py
-│   │   └── test_checkout_flow.py  # 完整流程测试
-│   └── test_db/
-│       ├── __init__.py
-│       └── test_data_consistency.py  # 数据一致性测试
-├── setup.py                 # 一键初始化脚本
-├── conftest.py              # Pytest Fixture
-├── pytest.ini               # Pytest 配置
-├── requirements.txt         # Python 依赖
-└── README.md                # 项目说明
+│   ├── test_ui/                # UI 测试：登录/注册/搜索/购物车/结算/完整下单流程
+│   ├── test_api/               # API 测试：直接请求 OpenCart 路由接口
+│   └── test_db/                # 数据一致性测试
+├── scripts/
+│   ├── seed_test_user.py       # 播种固定测试账号（幂等）
+│   └── enable_payment_extensions.py  # 启用支付方式并准备结算前置（幂等）
+├── setup.py                    # 本地一键初始化（建库/装依赖/装 Playwright）
+├── .github/workflows/test.yml  # GitHub Actions：云端自建 OpenCart 后跑全部测试
+├── conftest.py / pytest.ini / requirements.txt
+└── docs/                       # 测试计划 / 用例 / 缺陷报告 / 测试报告
 ```
 
-## 环境要求
+> 注意：**被测系统 OpenCart 不包含在本仓库**。测试需要一个已部署的 OpenCart 站点 + MySQL。CI 会在云端自动完成部署；本地运行需自备环境（见下文）。
 
-- Python 3.10+
-- XAMPP（Apache + MySQL）
-- OpenCart 4.x
+## 如何运行
 
-## 快速开始
+### 方式一：GitHub Actions（推荐，无需任何本地环境）
 
-### 第一步：安装 XAMPP 并启动服务
+仓库已配置 `.github/workflows/test.yml`：云端每次会自动 **下载 OpenCart 4.1.0.3 → 安装（含演示数据）→ 启用支付 → 播种测试账号 → 运行全部测试 → 上传 Allure 报告**，也会在每日 02:00 定时回归。
 
-1. 下载安装 [XAMPP](https://www.apachefriends.org/)
-2. 启动 Apache 和 MySQL
-3. 下载 [OpenCart 4.x](https://github.com/opencart/opencart/releases)
-4. 将 `upload` 目录复制到 `C:\xampp\htdocs\opencart`
-5. 浏览器访问 `http://localhost/opencart`，完成安装向导
-   - 数据库名：`xiangmu`
-   - 数据库用户：`root`
-   - 数据库密码：`root123456`
+想在自己账号下复现：
 
-### 第二步：一键初始化
+1. Fork（或复制）本仓库到你自己的 GitHub
+2. 推送一次代码（`git push`）触发 CI
+3. 在 **Actions** 页查看运行结果与日志
+4. 运行完成后，在 run 页面下载 **test-report** artifact（Allure 结果），或本地执行 `allure serve` 查看报告
 
-```bash
-git clone https://github.com/huangy00/test1.git
-cd test1
-python setup.py
-```
+CI 运行无需配置任何 Secrets；仅在你想收到**邮件通知**时，在仓库 `Settings → Secrets and variables → Actions` 配置：
 
-setup.py 会自动完成：
-- 创建 `xiangmu` 数据库
-- 创建虚拟环境并安装 Python 依赖
-- 安装 Playwright Chromium 浏览器
-- 安装 OpenCart 支付扩展
+- `SMTP_USERNAME`：QQ 邮箱地址（发件与收件均为它）
+- `SMTP_PASSWORD`：QQ 邮箱的 **SMTP 授权码**（在 QQ 邮箱 设置→账户 中开启 SMTP 后生成，非登录密码）
 
-### 第三步：运行测试
+未配置时邮件步骤自动跳过，不影响测试结果。
+
+### 方式二：本地运行（需要自备被测环境）
+
+测试需要一个能访问的 OpenCart 4.x（含演示数据）与 MySQL。任选其一部署被测系统：
+
+- 有 Docker：用官方 [opencart/opencart](https://github.com/opencart/opencart) 镜像或参考 `.github/workflows/test.yml` 中的部署步骤
+- 无 Docker：安装 MySQL，下载 [OpenCart 4.1.0.3](https://github.com/opencart/opencart/releases) 的 `upload` 到站点目录，运行 `php install/cli_install.php install ...`（参数见 workflow 第 4 步），再执行本仓库的 `scripts/enable_payment_extensions.py`
+
+环境就绪后：
 
 ```bash
-# Windows
-venv\Scripts\activate
+# 1) 安装依赖（含 Playwright Chromium）
+python -m venv venv && source venv/bin/activate    # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python -m playwright install chromium
 
-# Linux/Mac
-source venv/bin/activate
+# 2) 准备配置：从模板复制，或用环境变量注入（推荐 CI 方式）
+cp config/config.ini.example config/config.ini      # 填入本地数据库密码
+#   或 export DB_HOST=... DB_USER=root DB_PASSWORD=... DB_DATABASE=xiangmu UI_BASE_URL=http://localhost/opencart/
 
-# 运行所有测试
-pytest
+# 3) 播种测试数据（固定账号 testuser_2026@example.com）
+python scripts/enable_payment_extensions.py
+python scripts/seed_test_user.py
 
-# 仅运行 UI 测试
-pytest tests/test_ui/
+# 4) 运行测试（顺序：UI 下单在前，DB 一致性验证在后）
+python -m pytest tests/test_ui/ tests/test_api/ tests/test_db/
 
-# 仅运行数据库测试
-pytest tests/test_db/
-```
-
-### 第四步：查看 Allure 报告
-
-```bash
+# 5) 查看 Allure 报告
 allure serve allure-results
 ```
 
-## 核心模块说明
+## 配置说明（utils/config_reader.py）
 
-### utils/config_reader.py
-读取 `config.ini` 配置文件，提供 `get(section, key)` 和 `getint(section, key)` 方法。
+读取优先级：**环境变量 > config/config.ini > config/config.ini.example**
 
-### utils/logger.py
-封装 logging 模块，同时输出到控制台和日志文件，格式：`时间 - 名称 - 级别 - 消息`。
+- 环境变量键 = `[section]_[key]` 大写，如 `DB_PASSWORD`、`UI_BASE_URL`
+- `config/config.ini` 含真实密码，已被 `.gitignore` 忽略，不会提交
+- 仓库只维护 `config/config.ini.example` 模板
 
-### utils/api_client.py
-封装 requests.Session，统一处理 base_url、headers、超时，支持 GET/POST/PUT/DELETE，超时自动重试 3 次。
+## 测试设计
 
-### utils/db_helper.py
-使用 pymysql 封装数据库操作，支持 `query_one`、`query_all`、`execute` 方法，连接参数从 config.ini 读取。
+- 流程：注册用户 → 登录 → 搜索商品 → 加购物车 → 下单结算 → 数据库验证订单落库
+- **UI 端到端**(test_checkout_flow.py)：真实走 OpenCart 4 结算（填配送地址 → 选配送/支付方式 → 确认订单），并在 `oc_order` 验证订单真实落库
+- **API 层**：requests 直接调用 OpenCart 路由接口，断言含业务结果（注册成功跳转+落库、登录可访问账户页、加购后购物车含商品等）
+- **数据一致性**：注册/订单/订单商品/库存校验
+- 缺陷 BUG-002（未登录访问结算页重定向到购物车页而非登录页）以 `xfail` 标记为已知缺陷，修复后会自动 XPASS 提醒
 
-### pages/base_page.py
-Playwright 基础页面封装，提供 click、fill、wait_for_selector、screenshot 等操作，失败时自动截图附加到 Allure。
+## 文档
 
-### pages/register_page.py / login_page.py / product_page.py / checkout_page.py
-各业务页面对象，封装元素定位和操作方法，遵循 POM 设计模式。
-
-## 测试流程
-
-```
-注册用户 → 登录 → 搜索商品 → 加入购物车 → 下单结算 → 数据库验证
-```
-
-### UI 测试 (test_checkout_flow.py)
-
-1. 使用 Playwright 操作浏览器完成完整购物流程
-2. 下单成功后调用 db_helper 查询 oc_order 表验证订单落库
-3. 查询结果附加到 Allure 报告
-
-### 数据库测试 (test_data_consistency.py)
-
-1. 用户注册后查询 oc_customer 表验证用户已插入
-2. 下单后查询 oc_order 表验证订单已生成
-3. 验证订单商品关联和库存一致性
+测试计划、用例、缺陷报告、测试报告见 `docs/`。
