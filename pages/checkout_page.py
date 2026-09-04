@@ -40,33 +40,42 @@ class CheckoutPage(BasePage):
 
     def add_shipping_address(self, details: dict):
         """
-        填写并保存配送地址（适用于无默认地址的新注册用户）。
+        准备配送地址：新用户（无地址）填写并保存新地址；
+        已有地址的用户则从下拉选择默认地址。
         国家/省份需通过下拉选择，选择国家后等待省份列表 AJAX 加载。
         """
         logger.info("Adding shipping address")
         firstname_input = self.page.locator("#input-shipping-firstname")
-        if not firstname_input.is_visible(timeout=5000):
-            logger.info("配送地址表单不可见（可能已有地址），跳过")
+        if firstname_input.is_visible(timeout=5000):
+            firstname_input.fill(details.get("firstname", "Test"))
+            self.page.locator("#input-shipping-lastname").fill(details.get("lastname", "User"))
+            self.page.locator("#input-shipping-address-1").fill(details.get("address", "Test Street 123"))
+            self.page.locator("#input-shipping-city").fill(details.get("city", "Beijing"))
+            self.page.locator("#input-shipping-postcode").fill(details.get("postcode", "100000"))
+
+            country = self.page.locator("#input-shipping-country")
+            country.select_option(label=details.get("country", "China"))
+            self.page.wait_for_timeout(2000)  # 等待省份下拉通过 AJAX 填充
+            zone = self.page.locator("#input-shipping-zone")
+            if zone.locator("option").count() > 1:
+                zone.select_option(label=details.get("region", "Beijing"))
+            self.page.wait_for_timeout(500)
+
+            self.click(self.BTN_SHIPPING_ADDRESS)
+            self.page.wait_for_load_state("domcontentloaded")
+            self.page.wait_for_timeout(2000)
+            logger.info("Shipping address saved")
             return self
 
-        firstname_input.fill(details.get("firstname", "Test"))
-        self.page.locator("#input-shipping-lastname").fill(details.get("lastname", "User"))
-        self.page.locator("#input-shipping-address-1").fill(details.get("address", "Test Street 123"))
-        self.page.locator("#input-shipping-city").fill(details.get("city", "Beijing"))
-        self.page.locator("#input-shipping-postcode").fill(details.get("postcode", "100000"))
+        # 用户已有地址：从下拉选择（默认第一个），触发 change 载入会话
+        address_select = self.page.locator("#input-shipping-address")
+        if address_select.is_visible(timeout=5000) and address_select.locator("option").count() > 1:
+            address_select.select_option(index=1)
+            self.page.wait_for_timeout(2000)
+            logger.info("Existing shipping address selected")
+            return self
 
-        country = self.page.locator("#input-shipping-country")
-        country.select_option(label=details.get("country", "China"))
-        self.page.wait_for_timeout(2000)  # 等待省份下拉通过 AJAX 填充
-        zone = self.page.locator("#input-shipping-zone")
-        if zone.locator("option").count() > 1:
-            zone.select_option(label=details.get("region", "Beijing"))
-        self.page.wait_for_timeout(500)
-
-        self.click(self.BTN_SHIPPING_ADDRESS)
-        self.page.wait_for_load_state("domcontentloaded")
-        self.page.wait_for_timeout(2000)
-        logger.info("Shipping address saved")
+        logger.warning("配送地址表单不可见且无可用地址，跳过")
         return self
 
     def _choose_from_modal(self, open_btn_selector: str, radio_value: str,

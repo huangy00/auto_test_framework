@@ -16,7 +16,7 @@ class TestRegisterUI:
     @allure.story("Normal register")
     @allure.severity(allure.severity_level.BLOCKER)
     def test_register_success(self, page):
-        """Register with valid data, should succeed"""
+        """Register with valid data should succeed and persist the user"""
         unique_email = f"ui_test_{uuid.uuid4().hex[:8]}@example.com"
         register_page = RegisterPage(page)
         register_page.open()
@@ -27,8 +27,14 @@ class TestRegisterUI:
             password="Test@12345",
         )
         register_page.screenshot("register_success")
-        # Should show success message or redirect
-        assert register_page.is_register_success() or "account" in page.url or "success" in page.url
+        # 注册成功应跳转到成功页(account/success)
+        assert "success" in page.url or "account" in page.url, \
+            f"注册成功应跳转成功页，实际: {page.url}"
+        # 业务校验：新用户必须真实写入 oc_customer 表
+        user = db_helper.query_one(
+            "SELECT customer_id FROM oc_customer WHERE email = %s", (unique_email,)
+        )
+        assert user is not None, f"注册成功但数据库未找到用户 {unique_email}"
 
     @allure.story("Duplicate email")
     @allure.severity(allure.severity_level.CRITICAL)
