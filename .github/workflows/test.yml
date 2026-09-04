@@ -25,7 +25,6 @@ on:
 env:
   SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
   SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
-  NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
   # 测试配置经环境变量注入（utils/config_reader.py 支持 SECTION_KEY 覆盖 config.ini）
   DB_HOST: 127.0.0.1
   DB_PORT: '3306'
@@ -143,16 +142,18 @@ jobs:
           name: test-report
           path: allure-results/
 
-      # 第8步：发送邮件通知（SMTP_USERNAME/SMTP_PASSWORD/NOTIFY_TO 三个 Secrets 配齐才执行）
+      # 第8步：发送邮件通知（SMTP_USERNAME/SMTP_PASSWORD 配齐即执行）
+      # 收件人 = SMTP_USERNAME(发送账号自己的邮箱)。如需发给其他地址，
+      # 可在仓库配置 NOTIFY_TO secret 并把下方 to 改为 ${{ secrets.NOTIFY_TO }}
       - name: 发送邮件通知
-        if: always() && env.SMTP_PASSWORD != '' && env.SMTP_USERNAME != '' && env.NOTIFY_TO != ''
+        if: always() && env.SMTP_PASSWORD != '' && env.SMTP_USERNAME != ''
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.qq.com
           server_port: 465
           username: ${{ secrets.SMTP_USERNAME }}
           password: ${{ secrets.SMTP_PASSWORD }}
-          to: ${{ secrets.NOTIFY_TO }}
+          to: ${{ secrets.SMTP_USERNAME }}
           from: ${{ secrets.SMTP_USERNAME }}
           subject: GitHub Actions 测试结果通知
           body: |
